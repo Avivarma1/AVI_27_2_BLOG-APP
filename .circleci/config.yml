@@ -3,23 +3,19 @@ version: 2.1
 jobs:
   backend_ci:
     docker:
-      - image: cimg/python:3.11
+      - image: cimg/node:18.0
     steps:
       - checkout
       - run:
           name: Install Backend Dependencies
           command: |
             cd backend
-            if [ -f requirements.txt ]; then
-              pip install -r requirements.txt
-            else
-              echo "No requirements.txt found"
-            fi
+            npm install
       - run:
           name: Run Backend Tests
           command: |
             cd backend
-            pytest || echo "No tests"
+            npm test || echo "No tests"
 
   frontend_ci:
     docker:
@@ -30,12 +26,8 @@ jobs:
           name: Install Frontend Dependencies
           command: |
             cd frontend
-            if [ -f package.json ]; then
-              npm install
-              npm run build
-            else
-              echo "No package.json found"
-            fi
+            npm install
+            npm run build
 
   deploy_to_ec2:
     docker:
@@ -43,18 +35,21 @@ jobs:
     steps:
       - add_ssh_keys:
           fingerprints:
-            - "SHA256:AXd5L3L/oz5dnJt6yaHJstpKH+iY1UBNesJRYCbUJ8g"
+            - "SHA256:9ajH+lqwmRGo1IWNb2wwtf2IDAByxh1TxNjmmINm6DM"
       - run:
-          name: Deploy
+          name: Deploy to EC2
           command: |
             ssh -o StrictHostKeyChecking=no ec2-user@$EC2_IP "
               if [ ! -d /home/ec2-user/blog-app ]; then
-                git clone https://github.com/Avivarma1/blog-app.git /home/ec2-user/blog-app
+                git clone https://github.com/MaheshKumarBisai/Blog-app.git /home/ec2-user/blog-app
               fi &&
-              cd /home/ec2-user/blog-app && git pull origin main &&
-              npm install --prefix frontend &&
-              pip install -r backend/requirements.txt &&
-              sudo systemctl restart blog-app
+              cd /home/ec2-user/blog-app &&
+              git pull origin main &&
+
+              cd backend && npm install && cd .. &&
+              cd frontend && npm install && npm run build && cd .. &&
+
+              pm2 restart blog-app || pm2 start backend/server.js --name blog-app
             "
 
 workflows:
