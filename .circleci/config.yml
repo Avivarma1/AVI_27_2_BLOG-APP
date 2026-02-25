@@ -43,7 +43,7 @@ jobs:
     steps:
       - add_ssh_keys:
           fingerprints:
-            - "	SHA256:AXd5L3L/oz5dnJt6yaHJstpKH+iY1UBNesJRYCbUJ8g"
+            - "SHA256:AXd5L3L/oz5dnJt6yaHJstpKH+iY1UBNesJRYCbUJ8g"
       - run:
           name: Deploy
           command: |
@@ -62,3 +62,7 @@ workflows:
     jobs:
       - backend_ci
       - frontend_ci
+      - deploy_to_ec2:
+          requires:
+            - backend_ci
+            - frontend_ci
