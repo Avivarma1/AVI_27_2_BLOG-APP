@@ -3,7 +3,7 @@ version: 2.1
 jobs:
   backend_ci:
     docker:
-      - image: cimg/python:3.11
+      - image: cimg/python:3.12
     steps:
       - checkout
       - run:
