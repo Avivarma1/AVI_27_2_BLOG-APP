@@ -26,9 +26,9 @@ COPY nginx.conf /etc/nginx/nginx.conf
 # Copy built files from build stage
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Create non-root user
-RUN addgroup -g 101 -S nginx_user && \
-    adduser -S nginx_user -u 101 -G nginx_user
+# Create non-root user with different GID to avoid conflict
+RUN addgroup -g 1001 -S nginx_user && \
+    adduser -S nginx_user -u 1001 -G nginx_user
 
 # Change ownership
 RUN chown -R nginx_user:nginx_user /usr/share/nginx/html && \
