@@ -1,9 +1,3 @@
--- Create database
-CREATE DATABASE content_media_app;
-
--- Connect to database
-\c content_media_app;
-
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
