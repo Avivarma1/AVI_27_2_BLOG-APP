@@ -11,6 +11,9 @@ const contentRoutes = require('./routes/content');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Trust proxy - important for express-rate-limit and X-Forwarded-* headers
+app.set('trust proxy', 1);
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,

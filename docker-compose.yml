@@ -34,6 +34,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=5000
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@db:5432/${DB_NAME:-content_db}
       - DB_HOST=db
       - DB_PORT=5432
       - DB_NAME=${DB_NAME:-content_db}
