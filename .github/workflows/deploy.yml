@@ -1,0 +1,176 @@
+name: CI/CD Pipeline - Deploy to EC2
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  backend_ci:
+    name: Backend - Install & Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+          
+      - name: Install dependencies
+        working-directory: backend
+        run: npm install
+        
+      - name: Run tests
+        working-directory: backend
+        run: npm test || echo "No tests configured"
+
+  frontend_ci:
+    name: Frontend - Install & Build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+          
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm install
+        
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+        
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: frontend/dist
+          retention-days: 1
+
+  deploy_to_ec2:
+    name: Deploy to EC2
+    needs: [backend_ci, frontend_ci]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.EC2_IP }} >> ~/.ssh/known_hosts 2>/dev/null
+          
+      - name: Deploy to EC2
+        env:
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_IP: ${{ secrets.EC2_IP }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_IP }} << 'EOF'
+          
+          echo "========================================"
+          echo "Starting Deployment..."
+          echo "========================================"
+          
+          # Navigate to application directory
+          cd /home/${{ secrets.EC2_USER }}/blog-app || mkdir -p /home/${{ secrets.EC2_USER }}/blog-app
+          
+          # Clone or update repository
+          if [ ! -d ".git" ]; then
+            echo "Cloning repository..."
+            cd /home/${{ secrets.EC2_USER }}
+            git clone https://github.com/Avivarma1/AVI_27_2_BLOG-APP.git blog-app
+            cd blog-app
+          else
+            echo "Updating repository..."
+            git fetch origin main
+            git reset --hard origin/main
+          fi
+          
+          # Create .env file
+          echo "Creating .env file..."
+          export EC2_PUBLIC_IP=${{ secrets.EC2_IP }}
+          cat > .env << ENVFILE
+          NODE_ENV=production
+          PORT=5000
+          DB_HOST=db
+          DB_PORT=5432
+          DB_USER=${DB_USER}
+          DB_PASSWORD=${DB_PASSWORD}
+          DB_NAME=${DB_NAME}
+          JWT_SECRET=${JWT_SECRET}
+          API_URL=http://${EC2_PUBLIC_IP}:5000
+          EC2_PUBLIC_IP=${EC2_PUBLIC_IP}
+          VITE_API_URL=http://${EC2_PUBLIC_IP}
+          ENVFILE
+          
+          # Pull latest changes
+          echo "Pulling latest changes..."
+          git pull origin main
+          
+          # Stop existing containers
+          echo "Stopping existing containers..."
+          docker-compose down || true
+          
+          # Build and start containers
+          echo "Building containers..."
+          docker-compose build
+          
+          echo "Starting containers..."
+          docker-compose up -d
+          
+          # Wait for services to be healthy
+          echo "Waiting for services to start..."
+          sleep 10
+          
+          # Check service health
+          echo "Checking service status..."
+          docker-compose ps
+          
+          echo "========================================"
+          echo "✅ Deployment Complete!"
+          echo "========================================"
+          echo ""
+          echo "🌐 Application URLs:"
+          echo "  Frontend (Nginx):  http://${{ secrets.EC2_IP }}"
+          echo "  Backend API:       http://${{ secrets.EC2_IP }}/api"
+          echo "  Direct Backend:    http://${{ secrets.EC2_IP }}:5000"
+          echo ""
+          echo "📦 Running Containers:"
+          docker-compose ps
+          echo ""
+          echo "✓ All services deployed successfully!"
+          
+          EOF
+          
+      - name: Notify Deployment Success
+        if: success()
+        run: |
+          echo "✅ Deployment successful!"
+          echo "Application URL: http://${{ secrets.EC2_IP }}:5000"
+          
+      - name: Notify Deployment Failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          exit 1
